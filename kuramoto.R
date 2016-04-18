@@ -21,16 +21,20 @@ repos <- read.csv(file = paste(WORKSPACE, "effort_on_repos.csv", sep = "/"), hea
                  sep = ",", stringsAsFactors = FALSE, strip.white = TRUE)
 
 # For testing
-t <- jira[1:100,]
+t <- jira[1:10000,]
 t <- subset(t, select = c("Worker.Id", "Task.Id"))
 
 t2 <- as.data.frame(table(t))
 
-network <- graph.data.frame(t2)
-plot(network)
+network <- graph.data.frame(t2, directed = FALSE)
+#plot(network)
 
 V(network)
 E(network)
+
+fc <- fastgreedy.community(network)
+membership(fc)
+sizes(fc)
 
 melt( t, id.vars = "Worker.Id")
 
