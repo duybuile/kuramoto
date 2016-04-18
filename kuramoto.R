@@ -21,10 +21,13 @@ repos <- read.csv(file = paste(WORKSPACE, "effort_on_repos.csv", sep = "/"), hea
                  sep = ",", stringsAsFactors = FALSE, strip.white = TRUE)
 
 # For testing
-t <- jira[1:10000,]
-t <- subset(t, select = c("Worker.Id", "Task.Id"))
 
-t2 <- as.data.frame(table(t))
+set.seed(3223)
+jira_sample <- jira[sample(nrow(jira), nrow(jira))*0.05, ]
+
+jira_sample <- subset(jira_sample, select = c("Worker.Id", "Task.Id"))
+
+t2 <- as.data.frame(table(jira_sample))
 
 network <- graph.data.frame(t2, directed = FALSE)
 #plot(network)
