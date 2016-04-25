@@ -10,6 +10,7 @@ output: html_document
 setwd("C:/Users/duy.bui/Documents/GitHub/kuramoto")
 WORKSPACE <- getwd()
 ```
+
 ```{r, results='hide', warning=FALSE, message=FALSE}
 library(igraph)
 library(knitr)
@@ -17,9 +18,9 @@ library(knitr)
 
 The data includes the following 3 files:
 
-  - jira.csv:
-  - effort_on_tasks.csv:
-  - effort_on_repos.csv:
+  - jira.csv
+  - effort_on_tasks.csv
+  - effort_on_repos.csv
   
 ```{r, echo=TRUE}
 jira <- read.csv(file = paste(WORKSPACE, "jira.csv", sep = "/"), header = TRUE, sep = ",", 
@@ -32,20 +33,22 @@ repos <- read.csv(file = paste(WORKSPACE, "effort_on_repos.csv", sep = "/"), hea
                   sep = ",", stringsAsFactors = FALSE, strip.white = TRUE)
 ```
 
-##Understand data
-Before any processing is made, it is neccessary to understand the data.
+##Pre-processing data
+Pre-processing data will contain two following tasks:
 
-##Processing data
-
+ - Filter out bad data, i.e. missing values on Worker.ID. and Task.ID
+ - Deselect unneccessary data fields, such as date
+ 
 ```{r, echo=TRUE}
+# Remove missing values
 jira <- subset(jira, !is.na(jira$Worker.Id) & !is.na(jira$Task.Id))
 repos <- subset(repos, !is.na(repos$Worker.ID))
 tasks <- subset(tasks, !is.na(tasks$Worker.ID) & tasks$Task.id != "")
 
+# Deselect unneccessary data fields 
 jira <- subset(jira, select = c("Worker.Id", "Task.Id"))
 repos <- subset(repos, select = -c(Month..Day..Year.of.Date))
 tasks <- subset(tasks, select = -c(Date))
-
 ```
 
 
@@ -55,12 +58,15 @@ To start off, we define our graph with:
  - vertex: a worker or a task
  - edge: a connection from a worker to a task
 
-This graph could be built from the jira data. We use 10% random data first to test the speed of different algirthms
+This graph could be built from the jira data. We use 10% random data first to test the speed of different algorithms
 
 ```{r, eval=FALSE}
+# Take a sample of 10% data
 jira_sample_10 <- jira[sample(nrow(jira), nrow(jira)*0.1), ]
 
+# Create an edge-list data frame
 jira_edgeweight_10 <- as.data.frame(table(jira_sample_10))
+# Deselect any edge with weight as 0. 
 jira_edgeweight_10 <- subset(jira_edgeweight_10, jira_edgeweight_10$Freq > 0)
 
 # Generate a graph with vertices and edges
@@ -69,19 +75,124 @@ jira_graph_10 <- graph_from_edgelist(as.matrix(jira_edgeweight_10[,1:2]), direct
 E(jira_graph_10)$weight = jira_edgeweight_10[,3]
 ```
 
+Using two first common algorithms: 
+
+ - fast greedy: a bottom-down hierarchical approach to optimise the modularity
+ - walktrap: random walk approach
+
 ```{r}
+# Fast greedy community detection
 fc_10 <- fastgreedy.community(jira_graph_10, weights = E(jira_graph_10)$weight)
-wt_10 <- walktrap.community(jira_graph_10)
+nrow(sizes(fc_10))
+modularity(fc_10)
+# Walktrap community detection
+wt_10 <- walktrap.community(jira_graph_10, weights = E(jira_graph_10)$weight)
+nrow(sizes(wt_10))
+modularity(wt_10)
 ```
 
-```{r, echo=TRUE}
-jira_graph_50 <- jira[sample(nrow(jira), nrow(jira)*0.1), ]
-jira_graph_50 <- subset(jira_graph_50, jira_graph_50$Freq > 0)
+Walktrap performs a bit worse than fast greedy with 1690 communities and a smaller modularity. We try a few more algorithms:
 
+ - Label propagation: each node is assigned a k label which is updated during each iterative run
+ - Info map: find the community that minimizes the length of random walker trajectory
+ 
+```{r}
+# Label propagation
+lp_10 <- label.propagation.community(jira_graph_10, weights = E(jira_graph_10)$weight)
+nrow(sizes(lp_10))
+modularity(lp_10)
+# Leading eigenvector
+ic_10 <- infomap.community(jira_graph_10, e.weights = E(jira_graph_10)$weight)
+nrow(sizes(ic_10))
+modularity(ic_10)
 ```
 
+With modularity as 0.9087953 and 0.917949 respectively, both label propagation and info map have worse performance than fast greedy and walk trap. Other than that, igraph library has other algorithms such as edge betweeness, leading eigenvector or spring class but they are either not suitable for large network (high complexity) or inapplicable to weighted graph. 
 
+Another considerable algorithm is using Self-organised map (SOM) with a greedy fine-tuning algorithm. However, [this algorithm](https://machinelearningnow.wordpress.com/2014/08/22/community-detection/) is highly complex and only suitable for small graphs though it is proved to perform better than fast greedy. Trying this algorithm on the graph of 10% data (graph of 29k edges), the computer was freezing halfway and unable to produce the final result. 
+
+Since fast greedy and walktrap have a quite similar performance, we try these both on 50% of data. 
+
+```{r, results='hide', warning=FALSE}
+# Remove all variables of the previous run
+rm(jira_edgeweight_10, jira_graph_10, jira_sample_10, fc_10, wt_10, lp_10, ic_10)
+```
 ```{r, eval=FALSE}
-jira_graph_100 <- as.data.frame(table(jira))
-jira_graph_100 <- subset(jira_graph_100, jira_graph_100$Freq > 0)
+# Take a sample of 10% data
+jira_sample_50 <- jira[sample(nrow(jira), nrow(jira)*0.5), ]
+
+# Create an edge-list data frame
+jira_edgeweight_50 <- as.data.frame(table(jira_sample_50))
+# Deselect any edge with weight as 0. 
+jira_edgeweight_50 <- subset(jira_edgeweight_50, jira_edgeweight_50$Freq > 0)
+
+# Generate a graph with vertices and edges
+jira_graph_50 <- graph_from_edgelist(as.matrix(jira_edgeweight_50[,1:2]), directed = FALSE)
+# Add weight into each edge
+E(jira_graph_50)$weight = jira_edgeweight_50[,3]
+
+# Save the graph
+save(jira_graph_50, file = "jira_graph_50.Rdata")
 ```
+
+```{r, warning=FALSE}
+# This is to reduce the compiling time
+load("jira_graph_50.Rdata")
+
+# Fast greedy community detection
+fc_50 <- fastgreedy.community(jira_graph_50, weights = E(jira_graph_50)$weight)
+nrow(sizes(fc_50))
+modularity(fc_50)
+# Walktrap community detection
+wt_50 <- walktrap.community(jira_graph_50, weights = E(jira_graph_50)$weight)
+nrow(sizes(wt_50))
+modularity(wt_50)
+
+rm(jira_graph_50, fc_50, wt_50)
+```
+
+When the sample data increases, fast greedy performs far better than walktrap with a smaller community size (972 versus 1724) and higher modularity (0.971044 versus 0.9526203). 
+
+Similarly, we perform fast greedy algorithm on the whole data.
+
+```{r}
+# The following graph was prepared the same way as with 10% and 50% of data but with 100% of data.
+load("jira_graph.Rdata")
+
+fc <- fastgreedy.community(jira_graph, weights = E(jira_graph)$weight)
+nrow(sizes(fc))
+modularity(fc)
+```
+
+So, we have 842 communities with a modularity of 0.9689408. Since the problem is to find working groups, we remove tasks from each community.
+
+```{r}
+# Retrieve the community from fast greedy (there are 842 communities)
+com <- communities(fc)
+
+# Retrieve the unique task id from the data
+unique_task <- unique(jira$Task.Id)
+
+# Remove any task elements from each community
+working_groups <- lapply(com, function(x){setdiff(unlist(x), unique_task)})
+```
+
+We finally found 842 working groups (in the working_groups list). 
+
+#3. Find reviewers/testers/developers
+Assumption: Reviewers should have 0 coding efforts while developers must have much higher coding efforts than testers.
+
+Based on that, we calculate the coding effort for each person in the repository data
+
+```{r}
+
+```
+
+#4. Find people who work in isolation/work in a team
+```{r}
+size = sapply(working_groups, function(x){length(unlist(x))})
+which(size == 1) # people who work alone
+```
+
+
+#Conclusion
