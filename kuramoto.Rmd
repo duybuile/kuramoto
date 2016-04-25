@@ -1,0 +1,87 @@
+---
+title: "Finding Communities"
+author: "Duy Bui"
+date: "23 April 2016"
+output: html_document
+---
+
+#1. Data loading and processing
+```{r, echo=FALSE, results='hide', warning=FALSE, message=FALSE}
+setwd("C:/Users/duy.bui/Documents/GitHub/kuramoto")
+WORKSPACE <- getwd()
+```
+```{r, results='hide', warning=FALSE, message=FALSE}
+library(igraph)
+library(knitr)
+```
+
+The data includes the following 3 files:
+
+  - jira.csv:
+  - effort_on_tasks.csv:
+  - effort_on_repos.csv:
+  
+```{r, echo=TRUE}
+jira <- read.csv(file = paste(WORKSPACE, "jira.csv", sep = "/"), header = TRUE, sep = ",", 
+                 stringsAsFactors = FALSE, strip.white = TRUE)
+
+tasks <- read.csv(file = paste(WORKSPACE, "effort_on_tasks.csv", sep = "/"), header = TRUE, 
+                  sep = ",", stringsAsFactors = FALSE, strip.white = TRUE)
+
+repos <- read.csv(file = paste(WORKSPACE, "effort_on_repos.csv", sep = "/"), header = TRUE, 
+                  sep = ",", stringsAsFactors = FALSE, strip.white = TRUE)
+```
+
+##Understand data
+Before any processing is made, it is neccessary to understand the data.
+
+##Processing data
+
+```{r, echo=TRUE}
+jira <- subset(jira, !is.na(jira$Worker.Id) & !is.na(jira$Task.Id))
+repos <- subset(repos, !is.na(repos$Worker.ID))
+tasks <- subset(tasks, !is.na(tasks$Worker.ID) & tasks$Task.id != "")
+
+jira <- subset(jira, select = c("Worker.Id", "Task.Id"))
+repos <- subset(repos, select = -c(Month..Day..Year.of.Date))
+tasks <- subset(tasks, select = -c(Date))
+
+```
+
+
+#2. Finding communities
+To start off, we define our graph with:
+
+ - vertex: a worker or a task
+ - edge: a connection from a worker to a task
+
+This graph could be built from the jira data. We use 10% random data first to test the speed of different algirthms
+
+```{r, eval=FALSE}
+jira_sample_10 <- jira[sample(nrow(jira), nrow(jira)*0.1), ]
+
+jira_edgeweight_10 <- as.data.frame(table(jira_sample_10))
+jira_edgeweight_10 <- subset(jira_edgeweight_10, jira_edgeweight_10$Freq > 0)
+
+# Generate a graph with vertices and edges
+jira_graph_10 <- graph_from_edgelist(as.matrix(jira_edgeweight_10[,1:2]), directed = FALSE)
+# Add weight into each edge
+E(jira_graph_10)$weight = jira_edgeweight_10[,3]
+```
+
+```{r}
+fc_10 <- fastgreedy.community(jira_graph_10, weights = E(jira_graph_10)$weight)
+wt_10 <- walktrap.community(jira_graph_10)
+```
+
+```{r, echo=TRUE}
+jira_graph_50 <- jira[sample(nrow(jira), nrow(jira)*0.1), ]
+jira_graph_50 <- subset(jira_graph_50, jira_graph_50$Freq > 0)
+
+```
+
+
+```{r, eval=FALSE}
+jira_graph_100 <- as.data.frame(table(jira))
+jira_graph_100 <- subset(jira_graph_100, jira_graph_100$Freq > 0)
+```

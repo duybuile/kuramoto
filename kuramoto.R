@@ -22,7 +22,7 @@ repos <- read.csv(file = paste(WORKSPACE, "effort_on_repos.csv", sep = "/"), hea
 
 #--------- PROCESSING
 
-#
+# Remove 
 jira <- subset(jira, !is.na(jira$Worker.Id) & !is.na(jira$Task.Id))
 
 # For testing
@@ -58,6 +58,11 @@ modularity(wt)
 wt_size <- sizes(wt)
 
 save(network, file = "matrix.Rdata")
+
+load("jira_matrix.Rdata")
+load("network.Rdata")
+
+
 
 #This is for the whole database (takes about 3 hours)
 # Result is not great as there is only one community
