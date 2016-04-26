@@ -3,9 +3,11 @@ title: "Finding Communities"
 author: "Duy Bui"
 date: "23 April 2016"
 output: html_document
+abstract: 
+  This document is
 ---
 
-#1. Data loading and processing
+# 1. Data loading and processing
 ```{r, echo=FALSE, results='hide', warning=FALSE, message=FALSE}
 setwd("C:/Users/duy.bui/Documents/GitHub/kuramoto")
 WORKSPACE <- getwd()
@@ -18,9 +20,9 @@ library(knitr)
 
 The data includes the following 3 files:
 
-  - jira.csv
-  - effort_on_tasks.csv
-  - effort_on_repos.csv
+  - jira.csv: Data from Jira (Task tracker)
+  - effort_on_tasks.csv: Effort on task  
+  - effort_on_repos.csv: Coding effort (CE) on repositories
   
 ```{r, echo=TRUE}
 jira <- read.csv(file = paste(WORKSPACE, "jira.csv", sep = "/"), header = TRUE, sep = ",", 
@@ -33,7 +35,7 @@ repos <- read.csv(file = paste(WORKSPACE, "effort_on_repos.csv", sep = "/"), hea
                   sep = ",", stringsAsFactors = FALSE, strip.white = TRUE)
 ```
 
-##Pre-processing data
+### Pre-processing data
 Pre-processing data will contain two following tasks:
 
  - Filter out bad data, i.e. missing values on Worker.ID. and Task.ID
@@ -52,7 +54,7 @@ tasks <- subset(tasks, select = -c(Date))
 ```
 
 
-#2. Finding communities
+# 2. Finding communities
 To start off, we define our graph with:
 
  - vertex: a worker or a task
@@ -60,8 +62,9 @@ To start off, we define our graph with:
 
 This graph could be built from the jira data. We use 10% random data first to test the speed of different algorithms
 
-```{r, eval=FALSE}
+```{r, eval=TRUE}
 # Take a sample of 10% data
+set.seed(3223)
 jira_sample_10 <- jira[sample(nrow(jira), nrow(jira)*0.1), ]
 
 # Create an edge-list data frame
@@ -91,7 +94,7 @@ nrow(sizes(wt_10))
 modularity(wt_10)
 ```
 
-Walktrap performs a bit worse than fast greedy with 1690 communities and a smaller modularity. We try a few more algorithms:
+Walktrap performs a bit worse than fast greedy with **1626** communities and a smaller modularity (**0.9687593** versus **0.9797215**). We try a few more algorithms:
 
  - Label propagation: each node is assigned a k label which is updated during each iterative run
  - Info map: find the community that minimizes the length of random walker trajectory
@@ -107,7 +110,7 @@ nrow(sizes(ic_10))
 modularity(ic_10)
 ```
 
-With modularity as 0.9087953 and 0.917949 respectively, both label propagation and info map have worse performance than fast greedy and walk trap. Other than that, igraph library has other algorithms such as edge betweeness, leading eigenvector or spring class but they are either not suitable for large network (high complexity) or inapplicable to weighted graph. 
+With modularity as **0.9088545** and **0.9170358** respectively, both label propagation and info map have worse performance than fast greedy and walk trap. Other than that, igraph library has other algorithms such as edge betweeness, leading eigenvector or spring class but they are either not suitable for large network (high complexity) or inapplicable to weighted graph. 
 
 Another considerable algorithm is using Self-organised map (SOM) with a greedy fine-tuning algorithm. However, [this algorithm](https://machinelearningnow.wordpress.com/2014/08/22/community-detection/) is highly complex and only suitable for small graphs though it is proved to perform better than fast greedy. Trying this algorithm on the graph of 10% data (graph of 29k edges), the computer was freezing halfway and unable to produce the final result. 
 
@@ -119,6 +122,7 @@ rm(jira_edgeweight_10, jira_graph_10, jira_sample_10, fc_10, wt_10, lp_10, ic_10
 ```
 ```{r, eval=FALSE}
 # Take a sample of 10% data
+set.seed(3223)
 jira_sample_50 <- jira[sample(nrow(jira), nrow(jira)*0.5), ]
 
 # Create an edge-list data frame
@@ -179,20 +183,75 @@ working_groups <- lapply(com, function(x){setdiff(unlist(x), unique_task)})
 
 We finally found 842 working groups (in the working_groups list). 
 
-#3. Find reviewers/testers/developers
-Assumption: Reviewers should have 0 coding efforts while developers must have much higher coding efforts than testers.
+# 3. Find reviewers/testers/developers
+**Assumption:** Reviewers should have 0 coding efforts while developers must have much higher coding efforts than testers.
 
 Based on that, we calculate the coding effort for each person in the repository data
 
 ```{r}
-
+work_code <- aggregate(Coding.Effort ~ Worker.ID, data = repos, FUN = sum)
+# number of workers who have coding effort
+nrow(work_code)
+# number of unique workers on Jira database
+length(unique(jira$Worker.Id))
+# number of common Workers on Jira and coding effort
+length(intersect(unique(jira$Worker.Id), unique(repos$Worker.ID)))
+# number of common Workers on Jira and task effort
+length(intersect(unique(jira$Worker.Id), unique(tasks$Worker.ID)))
 ```
 
-#4. Find people who work in isolation/work in a team
+As can be seen, there are 3287 unique workers on Jira data, while this number is 2621 on the coding effort data. However, the number of workers who appear on both data is only 536. This means we can only predict the role of 536 workers in the community. (Needless to say, jira and task effort data only share 229 workers in common) 
+
+On the other hand, it is quite obvious that developers have more coding effort than testers. Also, it is a rule of thumb that the ratio between testers and developers is normally 1:2 or 1:3. We assume that the ratio here is 3:7 (3 testers versus 7 developers). We plot a histogram to see if there is any abnormality
+
 ```{r}
-size = sapply(working_groups, function(x){length(unlist(x))})
-which(size == 1) # people who work alone
+# Subset the developers and testers only
+dev_test <- subset(work_code, work_code$Coding.Effort !=0)
+hist(dev_test$Coding.Effort, breaks = 100, main = "Histogram of testers and developers", xlab = "Coding effort")
+abline(v = quantile(dev_test$Coding.Effort, 0.3), col = "red")
+```
+
+We set a thresold of 30% and identify the roles for each worker on jira data. 
+
+```{r}
+jira_workers <- data.frame(Worker.ID = unique(jira$Worker.Id), role = "")
+jira_workers$role <- as.character(jira_workers$role)
+
+# Take the threshold at 30%
+threshold = quantile(dev_test$Coding.Effort, 0.3)
+
+jira_workers[jira_workers$Worker.ID %in% work_code[work_code$Coding.Effort == 0,"Worker.ID"],"role"] = "Reviewers"
+jira_workers[jira_workers$Worker.ID %in% work_code[work_code$Coding.Effort > threshold,"Worker.ID"],"role"] = "Developers"
+jira_workers[jira_workers$Worker.ID %in% work_code[work_code$Coding.Effort <= threshold & work_code$Coding.Effort > 0,"Worker.ID"],"role"] = "Testers"
+
+# Print the result
+table(jira_workers$role)
 ```
 
 
-#Conclusion
+# 4. Find people who work in isolation/work in a team
+We could use the result from the community finding to solve this problem. Communities with only one worker means people who work in isolation and vice versa.
+
+```{r}
+# Set the condition for community whose size is 1
+cond <- sapply(working_groups, function(x) length(x) == 1 )
+# People who work on their own
+isolation <- working_groups[cond]
+# People who work in the team
+team <- working_groups[!cond]
+```
+
+The results show that we have 584 employees who work in isolation, while there are 258 teams of multiple workers.
+
+# Discussion
+The input data is quite big (490909 rows for Jira), which normally requires big data technology. However, the edge-list representation of graph (where all the 0-weight edges are trimmed off) reduces the size of the data significantly, which makes it applicable to different algorithms in *igraph* library. Having said that, if the size of the data is higher, it is neccessary to work on big data technology such as MapReduce and GiraphX 
+
+Community on other data sets: The problem was solved by using Jira data, mainly based on the idea that workers are in the same community if they work on the same task. However, the same techniques could be applied to other data sets:
+ - *Coding effort*: workers who work in the same repository/application are in the same community and vice versa
+ - *Effort on task*: workers who work in the same repository/applications/tasks are in the same community and vice versa
+
+Likewise, the final task of finding workers on the same team or in isolation could be different if the community is built from different data sets. 
+
+The second task of finding reviewers/developers/testers could be different if the assumption ratio of testers and developers is set differently. Nevertheless, for such tasks, it is the best to ask the clients for further information/clues of reviewers/testers/developers, so that the result will be more accurate. 
+
+# Conclusion
