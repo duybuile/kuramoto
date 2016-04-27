@@ -4,7 +4,8 @@ author: "Duy Bui"
 date: "23 April 2016"
 output: html_document
 abstract: 
-  This document is
+  This following document demonstrates a solution to a graph problem proposed by BlueOptima. It includes the experiments of different graph algorithms to find communities in a weighted network. The most suitable algorithm was chosen to identify communities in a software company. 
+  It is noted that the document is written with the inclusion of R code in order to reproduction if necessary.   
 ---
 
 # 1. Data loading and processing
@@ -255,3 +256,4 @@ Likewise, the final task of finding workers on the same team or in isolation cou
 The second task of finding reviewers/developers/testers could be different if the assumption ratio of testers and developers is set differently. Nevertheless, for such tasks, it is the best to ask the clients for further information/clues of reviewers/testers/developers, so that the result will be more accurate. 
 
 # Conclusion
+The document shows a graph solution to a typical unsupervised learning problem: finding communities in a weighted network. The data (provided by BlueOptima) is from a software company showing the relationship between employees, tasks and other application features. Fast greedy was chosen for this problem since it is fast and works well with a large network. Nevertheless, the document also suggests other approaches to work on the data, such as using other data sets, or applying different big data techniques.  
